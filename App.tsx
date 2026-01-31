@@ -1,122 +1,144 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useReducer } from 'react';
 import { Pyramid, RefreshCw, Plus, Tag, Layers } from 'lucide-react';
 
-import { Category, Domain, CustomTagsState } from './types';
+import { Category, Domain, AppState, Action } from './types';
 import { IMAGE_CATEGORIES, APP_CATEGORIES, FREE_CATEGORIES } from './constants';
 import { CategorySection } from './components/CategorySection';
 import { CreateCategoryModal } from './components/CreateCategoryModal';
 import { OutputDisplay } from './components/OutputDisplay';
 
-export default function App() {
-  const [subject, setSubject] = useState('');
-  const [selectedDomain, setSelectedDomain] = useState<Domain>('image');
-  
-  // State for Image Domain
-  const [imageCategories, setImageCategories] = useState<Category[]>(IMAGE_CATEGORIES);
-  const [imageSelectedTags, setImageSelectedTags] = useState<Set<string>>(new Set());
-  const [imageCustomTags, setImageCustomTags] = useState<CustomTagsState>({}); 
+const initialState: AppState = {
+  selectedDomain: 'image',
+  subject: '',
+  image: {
+    categories: IMAGE_CATEGORIES,
+    selectedTags: new Set(),
+    customTags: {}
+  },
+  app: {
+    categories: APP_CATEGORIES,
+    selectedTags: new Set(),
+    customTags: {}
+  },
+  free: {
+    categories: FREE_CATEGORIES,
+    selectedTags: new Set(),
+    customTags: {}
+  }
+};
 
-  // State for App Domain
-  const [appCategories, setAppCategories] = useState<Category[]>(APP_CATEGORIES);
-  const [appSelectedTags, setAppSelectedTags] = useState<Set<string>>(new Set());
-  const [appCustomTags, setAppCustomTags] = useState<CustomTagsState>({});
+function appReducer(state: AppState, action: Action): AppState {
+  const domain = state.selectedDomain;
+  const currentDomainState = state[domain];
 
-  // State for Free Domain
-  const [freeCategories, setFreeCategories] = useState<Category[]>(FREE_CATEGORIES);
-  const [freeSelectedTags, setFreeSelectedTags] = useState<Set<string>>(new Set());
-  const [freeCustomTags, setFreeCustomTags] = useState<CustomTagsState>({});
-
-  const [generatedPrompt, setGeneratedPrompt] = useState('');
-  
-  // UI State
-  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
-  
-  // Derived Active State
-  const currentCategories = selectedDomain === 'image' ? imageCategories : selectedDomain === 'app' ? appCategories : freeCategories;
-  const currentSelectedTags = selectedDomain === 'image' ? imageSelectedTags : selectedDomain === 'app' ? appSelectedTags : freeSelectedTags;
-  const currentCustomTags = selectedDomain === 'image' ? imageCustomTags : selectedDomain === 'app' ? appCustomTags : freeCustomTags;
-
-  const toggleOption = (option: string) => {
-    const newTags = new Set(currentSelectedTags);
-    if (newTags.has(option)) {
-      newTags.delete(option);
-    } else {
-      newTags.add(option);
-    }
+  switch (action.type) {
+    case 'SET_DOMAIN':
+      return { ...state, selectedDomain: action.domain };
     
-    if (selectedDomain === 'image') setImageSelectedTags(newTags);
-    else if (selectedDomain === 'app') setAppSelectedTags(newTags);
-    else setFreeSelectedTags(newTags);
-  };
+    case 'SET_SUBJECT':
+      return { ...state, subject: action.subject };
 
-  const addCustomTag = (categoryId: string, tag: string) => {
-    const setter = selectedDomain === 'image' ? setImageCustomTags : selectedDomain === 'app' ? setAppCustomTags : setFreeCustomTags;
-    setter(prev => {
-        const current = prev[categoryId] || [];
-        if (current.includes(tag)) return prev;
-        return { ...prev, [categoryId]: [tag, ...current] };
-    });
-  };
-
-  const removeCustomTag = (categoryId: string, tag: string) => {
-    const setter = selectedDomain === 'image' ? setImageCustomTags : selectedDomain === 'app' ? setAppCustomTags : setFreeCustomTags;
-    setter(prev => {
-        const current = prev[categoryId] || [];
-        return { ...prev, [categoryId]: current.filter(t => t !== tag) };
-    });
-  };
-
-  const createCategory = (name: string) => {
-    const newId = `custom-${Date.now()}`;
-    const newCategory: Category = {
-      id: newId,
-      label: name,
-      icon: <Tag className="w-5 h-5" />,
-      color: 'text-indigo-400',
-      options: []
-    };
-
-    if (selectedDomain === 'image') {
-        setImageCategories(prev => [...prev, newCategory]);
-    } else if (selectedDomain === 'app') {
-        setAppCategories(prev => [...prev, newCategory]);
-    } else {
-        setFreeCategories(prev => [...prev, newCategory]);
+    case 'TOGGLE_TAG': {
+      const newTags = new Set(currentDomainState.selectedTags);
+      if (newTags.has(action.option)) {
+        newTags.delete(action.option);
+      } else {
+        newTags.add(action.option);
+      }
+      return {
+        ...state,
+        [domain]: { ...currentDomainState, selectedTags: newTags }
+      };
     }
-  };
 
-  const clearAll = () => {
-    setSubject('');
-    // Only clear current domain
-    if (selectedDomain === 'image') {
-        setImageSelectedTags(new Set());
-        setImageCustomTags({});
-        setImageCategories(IMAGE_CATEGORIES);
-    } else if (selectedDomain === 'app') {
-        setAppSelectedTags(new Set());
-        setAppCustomTags({});
-        setAppCategories(APP_CATEGORIES);
-    } else {
-        setFreeSelectedTags(new Set());
-        setFreeCustomTags({});
-        setFreeCategories(FREE_CATEGORIES);
+    case 'ADD_CUSTOM_TAG': {
+      const current = currentDomainState.customTags[action.categoryId] || [];
+      if (current.includes(action.tag)) return state;
+      return {
+        ...state,
+        [domain]: {
+          ...currentDomainState,
+          customTags: {
+            ...currentDomainState.customTags,
+            [action.categoryId]: [action.tag, ...current]
+          }
+        }
+      };
     }
-  };
+
+    case 'REMOVE_CUSTOM_TAG': {
+      const current = currentDomainState.customTags[action.categoryId] || [];
+      return {
+        ...state,
+        [domain]: {
+          ...currentDomainState,
+          customTags: {
+            ...currentDomainState.customTags,
+            [action.categoryId]: current.filter(t => t !== action.tag)
+          }
+        }
+      };
+    }
+
+    case 'CREATE_CATEGORY': {
+      const newCategory: Category = {
+        id: `custom-${Date.now()}`,
+        label: action.name,
+        icon: action.icon,
+        color: 'text-indigo-400',
+        options: []
+      };
+      return {
+        ...state,
+        [domain]: {
+          ...currentDomainState,
+          categories: [...currentDomainState.categories, newCategory]
+        }
+      };
+    }
+
+    case 'RESET_DOMAIN': {
+      const defaultCategories = 
+        domain === 'image' ? IMAGE_CATEGORIES : 
+        domain === 'app' ? APP_CATEGORIES : 
+        FREE_CATEGORIES;
+      
+      return {
+        ...state,
+        subject: '',
+        [domain]: {
+          categories: defaultCategories,
+          selectedTags: new Set(),
+          customTags: {}
+        }
+      };
+    }
+
+    default:
+      return state;
+  }
+}
+
+export default function App() {
+  const [state, dispatch] = useReducer(appReducer, initialState);
+  const [generatedPrompt, setGeneratedPrompt] = useState('');
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+
+  const currentDomainState = state[state.selectedDomain];
 
   // Generate prompt whenever state changes
   useEffect(() => {
     const getCategoryTags = (catId: string) => {
-        const category = currentCategories.find(c => c.id === catId);
+        const category = currentDomainState.categories.find(c => c.id === catId);
         if (!category) return '';
-        const custom = currentCustomTags[catId] || [];
-        const selectedDefault = category.options.filter(opt => currentSelectedTags.has(opt));
+        const custom = currentDomainState.customTags[catId] || [];
+        const selectedDefault = category.options.filter(opt => currentDomainState.selectedTags.has(opt));
         return Array.from(new Set([...custom, ...selectedDefault])).join(' · ');
     };
 
-    const sVal = subject.trim() ? subject.trim() : 'Untitled';
+    const sVal = state.subject.trim() ? state.subject.trim() : 'Untitled';
     
     const getLabelKey = (label: string) => {
-        // Image Keys
         if (label.includes('Subject')) return 'S';
         if (label.includes('Artist')) return 'A';
         if (label.includes('Epoch')) return 'E';
@@ -124,24 +146,21 @@ export default function App() {
         if (label.includes('Lighting')) return 'L';
         if (label.includes('Camera')) return 'C';
         if (label.includes('Vibe')) return 'V';
-        
-        // App Keys
         if (label.includes('Toolkit')) return 'U';
         if (label.includes('Type')) return 'T';
-        if (label.includes('Features')) return 'K'; // Key Features
+        if (label.includes('Features')) return 'K';
         if (label.includes('Typography')) return 'F';
         if (label.includes('Shapes')) return 'S';
         if (label.includes('Iconography')) return 'I';
         if (label.includes('Color')) return 'C';
         if (label.includes('Layout')) return 'L';
         if (label.includes('Interaction')) return 'N';
-        
         return label.charAt(0).toUpperCase();
     };
 
     const activeParts = [
         { key: 'S', label: 'Subject', value: sVal },
-        ...currentCategories.map(cat => ({
+        ...currentDomainState.categories.map(cat => ({
             key: getLabelKey(cat.label),
             label: cat.label.split('&')[0].trim(),
             value: getCategoryTags(cat.id)
@@ -156,19 +175,21 @@ export default function App() {
     const headerLabels = activeParts.map(p => p.label).join(' · ');
     const bodyLines = activeParts.map(p => `${p.key}:: ${p.value}`).join('\n');
     
-    // Domain specific kernel Header
-    const kernelTitle = selectedDomain === 'image' ? 'SAERLCV KERNEL' : selectedDomain === 'app' ? 'APP-GEN KERNEL' : 'FREE KERNEL';
+    const kernelTitle = 
+      state.selectedDomain === 'image' ? 'SAERLCV KERNEL' : 
+      state.selectedDomain === 'app' ? 'APP-GEN KERNEL' : 
+      'FREE KERNEL';
     
     const finalDisplayString = `///▙▖▙▖▞▞▙▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂
 ▛///▞ ${kernelTitle} ::
 //▞▞〔${headerLabels}〕
 ${bodyLines}
 :: ∎
-${selectedDomain === 'image' ? '--v 6.0' : ''}`;
+${state.selectedDomain === 'image' ? '--v 6.0' : ''}`;
 
     setGeneratedPrompt(finalDisplayString);
 
-  }, [subject, currentSelectedTags, currentCustomTags, currentCategories, selectedDomain]);
+  }, [state, currentDomainState]);
 
   const copyToClipboard = () => {
     if (!generatedPrompt) return;
@@ -194,12 +215,12 @@ ${selectedDomain === 'image' ? '--v 6.0' : ''}`;
                     </h1>
                 </div>
                 <p className="text-slate-500 font-mono text-sm max-w-md">
-                /// KERNEL.PROMPT.GENERATOR :: {selectedDomain.toUpperCase()}.MODE
+                /// KERNEL.PROMPT.GENERATOR :: {state.selectedDomain.toUpperCase()}.MODE
                 </p>
               </div>
               
               <button 
-                onClick={clearAll}
+                onClick={() => dispatch({ type: 'RESET_DOMAIN' })}
                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
               >
                 <RefreshCw className="w-4 h-4" />
@@ -209,24 +230,21 @@ ${selectedDomain === 'image' ? '--v 6.0' : ''}`;
 
           {/* Domain Tabs */}
           <div className="flex p-1 bg-slate-900 rounded-xl border border-slate-800">
-             <button
-               onClick={() => setSelectedDomain('image')}
-               className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${selectedDomain === 'image' ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
-             >
-               IMAGE
-             </button>
-             <button
-               onClick={() => setSelectedDomain('app')}
-               className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${selectedDomain === 'app' ? 'bg-amber-800 text-white shadow-lg shadow-indigo-500/20' : 'text-slate-500 hover:text-slate-300'}`}
-             >
-               APP UI
-             </button>
-             <button
-               onClick={() => setSelectedDomain('free')}
-               className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${selectedDomain === 'free' ? 'bg-emerald-800 text-white shadow-lg shadow-fuchsia-500/20' : 'text-slate-500 hover:text-slate-300'}`}
-             >
-               FREE
-             </button>
+             {(['image', 'app', 'free'] as Domain[]).map((d) => (
+               <button
+                 key={d}
+                 onClick={() => dispatch({ type: 'SET_DOMAIN', domain: d })}
+                 className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${
+                   state.selectedDomain === d 
+                     ? d === 'image' ? 'bg-slate-800 text-white shadow-lg' :
+                       d === 'app' ? 'bg-amber-800 text-white shadow-lg' :
+                       'bg-emerald-800 text-white shadow-lg'
+                     : 'text-slate-500 hover:text-slate-300'
+                 }`}
+               >
+                 {d.toUpperCase()}
+               </button>
+             ))}
           </div>
         </header>
 
@@ -238,11 +256,11 @@ ${selectedDomain === 'image' ? '--v 6.0' : ''}`;
                 </div>
                 <input
                     type="text"
-                    value={subject}
-                    onChange={(e) => setSubject(e.target.value)}
+                    value={state.subject}
+                    onChange={(e) => dispatch({ type: 'SET_SUBJECT', subject: e.target.value })}
                     placeholder={
-                        selectedDomain === 'image' ? "Enter core subject..." : 
-                        selectedDomain === 'app' ? "Enter app concept (e.g. 'Yoga Tracker')..." : 
+                        state.selectedDomain === 'image' ? "Enter core subject..." : 
+                        state.selectedDomain === 'app' ? "Enter app concept (e.g. 'Yoga Tracker')..." : 
                         "Enter subject..."
                     }
                     className="w-full bg-slate-900/50 border border-slate-700 text-slate-100 text-lg rounded-2xl py-4 pl-12 pr-4 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 block transition-all shadow-inner placeholder:text-slate-600"
@@ -258,7 +276,7 @@ ${selectedDomain === 'image' ? '--v 6.0' : ''}`;
         </div>
 
         {/* Categories Grid or Empty State */}
-        {currentCategories.length === 0 ? (
+        {currentDomainState.categories.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-slate-800 rounded-2xl bg-slate-900/20 text-center">
              <div className="p-4 rounded-2xl bg-slate-900 mb-5 shadow-xl shadow-black/20 border border-slate-800">
                 <Layers className="w-10 h-10 text-slate-600" />
@@ -270,15 +288,15 @@ ${selectedDomain === 'image' ? '--v 6.0' : ''}`;
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2">
-            {currentCategories.map((category) => (
+            {currentDomainState.categories.map((category) => (
               <CategorySection
                 key={category.id}
                 category={category}
-                selectedOptions={currentSelectedTags}
-                customTags={currentCustomTags}
-                onAddCustomTag={addCustomTag}
-                onRemoveCustomTag={removeCustomTag}
-                toggleOption={toggleOption}
+                selectedOptions={currentDomainState.selectedTags}
+                customTags={currentDomainState.customTags}
+                onAddCustomTag={(catId, tag) => dispatch({ type: 'ADD_CUSTOM_TAG', categoryId: catId, tag })}
+                onRemoveCustomTag={(catId, tag) => dispatch({ type: 'REMOVE_CUSTOM_TAG', categoryId: catId, tag })}
+                toggleOption={(opt) => dispatch({ type: 'TOGGLE_TAG', option: opt })}
               />
             ))}
           </div>
@@ -307,7 +325,7 @@ ${selectedDomain === 'image' ? '--v 6.0' : ''}`;
         <CreateCategoryModal 
             isOpen={isCategoryModalOpen} 
             onClose={() => setIsCategoryModalOpen(false)} 
-            onCreate={createCategory} 
+            onCreate={(name) => dispatch({ type: 'CREATE_CATEGORY', name, icon: <Tag className="w-5 h-5" /> })} 
         />
 
       </div>
