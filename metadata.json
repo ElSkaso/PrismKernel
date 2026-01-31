@@ -1,0 +1,5 @@
+{
+  "name": "PrismKernel",
+  "description": "A high-fidelity prompt engineering interface for generating style-specific image and UI prompts.",
+  "requestFramePermissions": []
+}
